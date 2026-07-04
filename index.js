@@ -1,16 +1,23 @@
 require("dotenv").config();
 const fs = require("fs");
 const TelegramBot = require("node-telegram-bot-api");
+
 const { searchEbay } = require("./ebay");
 const { isValid } = require("./filter");
 
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, {
+// -------------------- TELEGRAM --------------------
+
+// robust für verschiedene node-telegram-bot-api exports
+const TelegramBotClass =
+  TelegramBot.default ? TelegramBot.default : TelegramBot;
+
+const bot = new TelegramBotClass(process.env.TELEGRAM_TOKEN, {
   polling: false
 });
 
-const SEEN_FILE = "./seen.json";
-
 // -------------------- MEMORY --------------------
+
+const SEEN_FILE = "./seen.json";
 
 function loadSeen() {
   try {
@@ -24,13 +31,18 @@ function saveSeen(data) {
   fs.writeFileSync(SEEN_FILE, JSON.stringify(data, null, 2));
 }
 
-// -------------------- TELEGRAM --------------------
+// -------------------- SEND MESSAGE --------------------
 
 function sendMessage(text) {
+  if (!process.env.CHAT_ID) {
+    console.error("❌ CHAT_ID fehlt!");
+    return;
+  }
+
   bot.sendMessage(process.env.CHAT_ID, text);
 }
 
-// -------------------- MAIN LOGIC --------------------
+// -------------------- MAIN SCAN --------------------
 
 async function run() {
   console.log("🔎 eBay Scan startet...");
@@ -43,12 +55,18 @@ async function run() {
   for (const item of items) {
     const id = item.link;
 
-    // schon gesehen → skip
     if (seen.includes(id)) continue;
 
     if (isValid(item)) {
       sendMessage(
-        `💻 MacBook Deal gefunden!\n\n${item.title}\n${item.price}\n\n${item.link}`
+`💻 MACBOOK DEAL GEFUNDEN
+
+📌 ${item.title}
+💰 ${item.price}
+
+✔ geprüft (kein Defekt / kein Lock erkannt)
+
+🔗 ${item.link}`
       );
 
       seen.push(id);
@@ -61,12 +79,13 @@ async function run() {
   console.log(`✅ Scan fertig. Neue Deals: ${newDeals}`);
 }
 
-// -------------------- DAILY RUN --------------------
+// -------------------- DAILY LOOP --------------------
 
 async function start() {
   await run();
 
   console.log("⏳ Warte 24 Stunden bis zum nächsten Scan...");
+
   setTimeout(start, 24 * 60 * 60 * 1000);
 }
 
